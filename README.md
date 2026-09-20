@@ -34,7 +34,7 @@ The frontend never connects to Supabase directly. All data flows through the Fas
 ### 🔐 Authentication & Authorization
 
 - Role-based login: **Customer** and **Store Owner**
-- Session persisted via `localStorage`
+- Session persisted via `supabase`
 - `/login` — login page with role selector and password field
 - `/chat` — protected, customer-only route
 - `/dashboard`, `/orders`, `/products`, etc. — protected, owner-only routes
@@ -316,4 +316,4 @@ npm run dev
 - Frontend never contains Supabase credentials or database logic
 - All business logic (inventory checks, order creation, stock deduction, price calculation) lives in the backend
 - Voice input uses the browser-native Web Speech API — no additional dependencies
-- `localStorage` is used only for auth session persistence, not as a database
+- `supabase` is used only for auth session persistence, not as a database

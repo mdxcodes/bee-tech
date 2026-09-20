@@ -1,6 +1,4 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "./services/auth.js";
 import Layout from "./components/Layout.jsx";
 import Login from "./pages/Login.jsx";
@@ -12,6 +10,7 @@ import Customers from "./pages/Customers.jsx";
 import Analytics from "./pages/Analytics.jsx";
 import Settings from "./pages/Settings.jsx";
 import Chat from "./pages/Chat.jsx";
+import WhatsAppTest from "./pages/WhatsAppTest.jsx";
 
 function ProtectedRoute({ role, children }) {
   const user = getCurrentUser();
@@ -34,6 +33,7 @@ function App() {
         <Route path="/analytics" element={<ProtectedRoute role="owner"><Analytics /></ProtectedRoute>} />
         <Route path="/ai-logs" element={<ProtectedRoute role="owner"><AILogs /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute role="owner"><Settings /></ProtectedRoute>} />
+        <Route path="/whatsapp" element={<ProtectedRoute role="owner"><WhatsAppTest /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to={getCurrentUser()?.role === "owner" ? "/dashboard" : "/chat"} replace />} />
     </Routes>

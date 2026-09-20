@@ -340,4 +340,28 @@ export async function cancelOrder(id) {
   }
 }
 
+export async function getWhatsAppStatus() {
+  try {
+    return await request("/whatsapp/status");
+  } catch {
+    return { configured: false };
+  }
+}
+
+export async function sendWhatsAppMessage(to, message) {
+  try {
+    return await request("/whatsapp/send", { method: "POST", body: JSON.stringify({ to, message }) });
+  } catch {
+    return { success: false, message: "Backend unreachable" };
+  }
+}
+
+export async function sendWhatsAppTest() {
+  try {
+    return await request("/whatsapp/test", { method: "GET" });
+  } catch {
+    return { success: false, message: "Backend unreachable" };
+  }
+}
+
 export { LOW_STOCK_THRESHOLD };

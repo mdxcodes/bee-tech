@@ -8,6 +8,7 @@ import {
   Bot,
   Settings,
   Info,
+  MessageSquare,
 } from "lucide-react";
 
 const navItems = [
@@ -17,6 +18,7 @@ const navItems = [
   { path: "/customers", label: "Customers", icon: Users },
   { path: "/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/ai-logs", label: "AI Logs", icon: Bot },
+  { path: "/whatsapp", label: "WhatsApp", icon: MessageSquare },
   { path: "/settings", label: "Settings", icon: Settings },
   { path: "/competition", label: "Competition Info", icon: Info },
 ];
