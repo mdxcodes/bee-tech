@@ -13,8 +13,12 @@ class NormalizedRequest(BaseModel):
 
 
 class OrderResponse(BaseModel):
+    success: bool | None = None
+    message: str | None = None
     order_id: str | None = None
-    confirmation: str | None = None
+    items: list[dict] | None = None
+    total: float | None = None
+    delivery_created: bool | None = None
     error: str | None = None
 
 
@@ -27,8 +31,12 @@ async def process_request(request: NormalizedRequest):
     agent = StoreAgent()
     result = await agent.run(state)
     return OrderResponse(
+        success=result.success,
+        message=result.confirmation_message,
         order_id=result.order_id,
-        confirmation=result.confirmation_message,
+        items=result.items,
+        total=result.total,
+        delivery_created=result.delivery_created,
         error=result.error,
     )
 
