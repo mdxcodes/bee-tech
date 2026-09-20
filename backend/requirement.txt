@@ -1,7 +1,7 @@
-fastapi 
-uvicorn 
+fastapi
+uvicorn
 python-dotenv
-supabase 
+supabase-py
 pydantic
-google-genai 
+google-genai
 python-multipart
