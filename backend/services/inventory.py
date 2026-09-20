@@ -20,7 +20,7 @@ def get_product(product_id: str) -> Product | None:
 
 def check_availability(product_id: str, quantity: int) -> bool:
     supabase = get_supabase()
-    response = supabase.table("products").select("stock").eq("id", product_id).single().execute()
+    response = supabase.table("products").select("stock_quantity").eq("id", product_id).single().execute()
     if response.data:
-        return response.data["stock"] >= quantity
+        return response.data["stock_quantity"] >= quantity
     return False

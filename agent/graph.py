@@ -1,17 +1,20 @@
+import json
 import os
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+from groq import Groq
 
 from agent.state import AgentState
 from agent.tools import TOOLS
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 SYSTEM_PROMPT = """You are an autonomous AI operator for a neighborhood Indian Kirana store.
 
@@ -30,144 +33,175 @@ When the customer requests an order:
 2. Search live inventory.
 3. Resolve product matches.
 4. If products are available and unambiguous, create the order.
-5. If delivery is requested, create a delivery task.
+5. If delivery is requested, include the delivery address in the order.
 6. Verify the tool results.
 7. Return a concise customer confirmation.
+
+Customer ID is optional. If the customer does not provide a phone number or customer ID, create the order without it.
 
 If information is ambiguous, ask the customer instead of guessing.
 
 Never claim an action succeeded unless the corresponding tool returned success."""
 
 
-def _get_client() -> genai.Client:
-    api_key = os.getenv("GOOGLE_API_KEY")
+def _log_safe_config() -> None:
+    api_key_present = bool(GROQ_API_KEY)
+    print(
+        f"[config] LLM provider: {LLM_PROVIDER} | "
+        f"model: {GROQ_MODEL} | "
+        f"API key present: {api_key_present}"
+    )
+
+
+def _get_client() -> Groq:
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("GOOGLE_API_KEY must be set in environment")
-    return genai.Client(api_key=api_key)
+        raise RuntimeError("GROQ_API_KEY must be set in environment")
+    return Groq(api_key=api_key)
 
 
-def _build_tool_definitions() -> list[types.Tool]:
-    declarations = [
-        types.FunctionDeclaration(
-            name="search_inventory",
-            description="Search inventory for products by name or keyword.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search query, e.g. 'Amul Taaza' or 'Maggi'.",
-                    }
-                },
-                "required": ["query"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="get_product_price",
-            description="Get the current price of a product by its ID.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "product_id": {
-                        "type": "string",
-                        "description": "The product ID.",
-                    }
-                },
-                "required": ["product_id"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="check_availability",
-            description="Check if a product is available in the requested quantity.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "product_id": {
-                        "type": "string",
-                        "description": "The product ID.",
+def _build_tool_definitions() -> list[dict]:
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "search_inventory",
+                "description": "Search inventory for products by name or keyword.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query, e.g. 'Amul Taaza' or 'Maggi'.",
+                        }
                     },
-                    "quantity": {
-                        "type": "integer",
-                        "description": "Requested quantity.",
-                    },
+                    "required": ["query"],
                 },
-                "required": ["product_id", "quantity"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="create_order",
-            description="Create a structured order. The backend calculates total from database prices. Requires items with product_id and quantity.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "customer_id": {
-                        "type": "string",
-                        "description": "Optional customer ID.",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_product_price",
+                "description": "Get the current price of a product by its ID.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "product_id": {
+                            "anyOf": [
+                                {"type": "string"},
+                                {"type": "number"}
+                            ],
+                            "description": "The product ID.",
+                        }
                     },
-                    "items": {
-                        "type": "array",
-                        "description": "List of items, each with product_id and quantity.",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "product_id": {"type": "string"},
-                                "quantity": {"type": "integer"},
-                            },
-                            "required": ["product_id", "quantity"],
+                    "required": ["product_id"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "check_availability",
+                "description": "Check if a product is available in the requested quantity.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "product_id": {
+                            "anyOf": [
+                                {"type": "string"},
+                                {"type": "number"}
+                            ],
+                            "description": "The product ID.",
+                        },
+                        "quantity": {
+                            "type": "integer",
+                            "description": "Requested quantity.",
                         },
                     },
+                    "required": ["product_id", "quantity"],
                 },
-                "required": ["items"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="get_customer_by_phone",
-            description="Look up a customer by phone number.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "phone": {
-                        "type": "string",
-                        "description": "Customer phone number.",
-                    }
-                },
-                "required": ["phone"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="get_previous_orders",
-            description="Get recent orders for a customer.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "customer_id": {
-                        "type": "string",
-                        "description": "Customer ID.",
-                    }
-                },
-                "required": ["customer_id"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="create_delivery_task",
-            description="Create a delivery task for an order.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "order_id": {
-                        "type": "string",
-                        "description": "The order ID.",
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "create_order",
+                "description": "Create a structured order. The backend calculates total from database prices. Requires items with product_id and quantity. If the customer requests delivery, include the delivery address.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "customer_id": {
+                            "anyOf": [
+                                {"type": "string"},
+                                {"type": "null"}
+                            ],
+                            "description": "Optional customer ID.",
+                        },
+                        "items": {
+                            "type": "array",
+                            "description": "List of items, each with product_id and quantity.",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "product_id": {
+                                        "anyOf": [
+                                            {"type": "string"},
+                                            {"type": "number"}
+                                        ]
+                                    },
+                                    "quantity": {"type": "integer"},
+                                },
+                                "required": ["product_id", "quantity"],
+                            },
+                        },
+                        "delivery_address": {
+                            "type": "string",
+                            "description": "Optional delivery address if the customer requested delivery.",
+                        },
                     },
-                    "address": {
-                        "type": "string",
-                        "description": "Delivery address.",
-                    },
+                    "required": ["items"],
                 },
-                "required": ["order_id", "address"],
             },
-        ),
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_customer_by_phone",
+                "description": "Look up a customer by phone number.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "phone": {
+                            "type": "string",
+                            "description": "Customer phone number.",
+                        }
+                    },
+                    "required": ["phone"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_previous_orders",
+                "description": "Get recent orders for a customer.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "customer_id": {
+                            "anyOf": [
+                                {"type": "string"},
+                                {"type": "number"}
+                            ],
+                            "description": "Customer ID.",
+                        }
+                    },
+                    "required": ["customer_id"],
+                },
+            },
+        },
     ]
-    return [types.Tool(function_declarations=declarations)]
 
 
 def _execute_tool_call(name: str, args: dict[str, Any]) -> Any:
@@ -175,9 +209,25 @@ def _execute_tool_call(name: str, args: dict[str, Any]) -> Any:
     if not func:
         return {"error": f"Unknown tool: {name}"}
     try:
-        return func(**args)
+        normalized = _normalize_args(name, args)
+        return func(**normalized)
     except Exception as exc:
         return {"error": str(exc)}
+
+
+def _normalize_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
+    aliases = {
+        "search_inventory": {"search_query": "query"},
+        "create_order": {"order_items": "items"},
+    }
+    mapping = aliases.get(name, {})
+    normalized = {mapping.get(k, k): v for k, v in args.items()}
+
+    for id_field in ("product_id", "order_id"):
+        if id_field in normalized and isinstance(normalized[id_field], (int, float)):
+            normalized[id_field] = str(int(normalized[id_field]))
+
+    return normalized
 
 
 class StoreAgent:
@@ -187,82 +237,93 @@ class StoreAgent:
     async def run(self, state: AgentState) -> AgentState:
         client = _get_client()
         tools_def = _build_tool_definitions()
-        config = types.GenerateContentConfig(
-            tools=tools_def,
-            system_instruction=SYSTEM_PROMPT,
-        )
 
-        contents: list[types.Content] = [
-            types.Content(
-                role="user",
-                parts=[types.Part(text=state.raw_input)],
-            )
+        messages: list[dict] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": state.raw_input},
         ]
 
         tool_results: dict[str, Any] = {}
         max_iterations = 10
 
         for _ in range(max_iterations):
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=contents,
-                config=config,
+            response = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=messages,
+                tools=tools_def,
+                tool_choice="auto",
             )
 
-            if not response.candidates:
-                state.error = "No response from model."
-                state.success = False
-                return state
+            message = response.choices[0].message
 
-            candidate = response.candidates[0]
-            if not candidate.content or not candidate.content.parts:
-                state.error = "Empty response from model."
-                state.success = False
-                return state
+            if message.tool_calls:
+                print(f"[agent] Groq requested {len(message.tool_calls)} tool(s)")
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": message.content,
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": tc.type,
+                                "function": {
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments,
+                                },
+                            }
+                            for tc in message.tool_calls
+                        ],
+                    }
+                )
 
-            parts = candidate.content.parts
+                tool_response_messages = []
+                for tc in message.tool_calls:
+                    name = tc.function.name
+                    try:
+                        args = json.loads(tc.function.arguments or "{}")
+                    except json.JSONDecodeError:
+                        args = {}
+                    normalized = _normalize_args(name, args)
+                    print(f"[agent] Groq requested tool: {name} args={normalized}")
+                    result = _execute_tool_call(name, normalized)
+                    tool_results[name] = result
+                    result_str = json.dumps(result, default=str) if not isinstance(result, str) else result
+                    print(f"[agent] Tool result for {name}: {result_str[:200]}")
+                    tool_response_messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": result_str,
+                        }
+                    )
 
-            function_calls = [p for p in parts if p.function_call]
-            text_parts = [p for p in parts if p.text]
+                messages.extend(tool_response_messages)
+                continue
 
-            if text_parts and not function_calls:
-                state.confirmation_message = text_parts[0].text.strip()
+            text = (message.content or "").strip()
+            if text:
+                print(f"[agent] Groq final response: {text[:100]}")
+                state.confirmation_message = text
                 state.success = True
 
                 if "create_order" in tool_results:
                     order = tool_results["create_order"]
                     state.order_id = order.get("id")
                     state.items = order.get("items")
-                    state.total = order.get("total")
-
-                if "create_delivery_task" in tool_results:
-                    delivery = tool_results["create_delivery_task"]
-                    state.delivery_task_id = delivery.get("id")
-                    state.delivery_created = True
+                    state.order_total = order.get("total_amount")
+                    state.delivery_created = bool(order.get("delivery_address"))
 
                 return state
 
-            if function_calls:
-                contents.append(types.Content(role="model", parts=parts))
-
-                response_parts = []
-                for fc in function_calls:
-                    result = _execute_tool_call(fc.name, dict(fc.args))
-                    tool_results[fc.name] = result
-                    response_parts.append(
-                        types.Part(
-                            function_response=types.FunctionResponse(
-                                name=fc.name,
-                                response=result if isinstance(result, dict) else {"result": result},
-                            )
-                        )
-                    )
-
-                contents.append(types.Content(role="user", parts=response_parts))
+            state.error = "Empty response from model."
+            state.success = False
+            return state
 
         state.error = "Agent stopped: maximum tool-call iterations reached."
         state.success = False
         return state
 
+
+_log_safe_config()
 
 agent = StoreAgent()

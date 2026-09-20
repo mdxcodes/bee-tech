@@ -15,7 +15,7 @@ class NormalizedRequest(BaseModel):
 class OrderResponse(BaseModel):
     success: bool | None = None
     message: str | None = None
-    order_id: str | None = None
+    order_id: str | int | None = None
     items: list[dict] | None = None
     total: float | None = None
     delivery_created: bool | None = None
@@ -36,7 +36,7 @@ async def process_request(request: NormalizedRequest):
             message=result.confirmation_message,
             order_id=result.order_id,
             items=result.items,
-            total=result.total,
+            total=result.order_total,
             delivery_created=result.delivery_created,
             error=result.error,
         )

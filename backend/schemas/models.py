@@ -4,17 +4,17 @@ from typing import Optional
 
 
 class Customer(BaseModel):
-    id: str
+    id: str | int
     name: str
     phone: str
     address: Optional[str] = None
 
 
 class Product(BaseModel):
-    id: str
+    id: str | int
     name: str
     price: float
-    stock: int
+    stock_quantity: int
 
 
 class OrderItem(BaseModel):
@@ -26,17 +26,18 @@ class OrderItem(BaseModel):
 
 
 class Order(BaseModel):
-    id: str
-    customer_id: Optional[str]
-    items: list[OrderItem]
-    total: float
+    id: str | int
+    customer_id: str | int | None
+    total_amount: float
     status: str
+    delivery_address: str | None = None
+    items: list[dict] | None = None
     created_at: Optional[datetime] = None
 
 
 class DeliveryTask(BaseModel):
-    id: str
-    order_id: str
+    id: str | int
+    order_id: str | int
     address: str
     status: str
     created_at: Optional[datetime] = None
