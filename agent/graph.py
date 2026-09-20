@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -8,9 +9,10 @@ from google.genai import types
 from agent.state import AgentState
 from agent.tools import TOOLS
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 SYSTEM_PROMPT = """You are an autonomous AI operator for a neighborhood Indian Kirana store.
@@ -37,6 +39,14 @@ When the customer requests an order:
 If information is ambiguous, ask the customer instead of guessing.
 
 Never claim an action succeeded unless the corresponding tool returned success."""
+
+
+def _log_safe_config() -> None:
+    api_key_present = bool(GOOGLE_API_KEY)
+    print(
+        f"[config] Gemini model: {GEMINI_MODEL} | "
+        f"API key present: {api_key_present}"
+    )
 
 
 def _get_client() -> genai.Client:
@@ -233,7 +243,7 @@ class StoreAgent:
                     order = tool_results["create_order"]
                     state.order_id = order.get("id")
                     state.items = order.get("items")
-                    state.total = order.get("total")
+                    state.order_total = order.get("total")
 
                 if "create_delivery_task" in tool_results:
                     delivery = tool_results["create_delivery_task"]
@@ -247,12 +257,16 @@ class StoreAgent:
 
                 response_parts = []
                 for fc in function_calls:
-                    result = _execute_tool_call(fc.name, dict(fc.args))
-                    tool_results[fc.name] = result
+                    function_call = fc.function_call
+                    name = function_call.name
+                    args = dict(function_call.args)
+                    print(f"[agent] Gemini requested tool: {name} args={args}")
+                    result = _execute_tool_call(name, args)
+                    tool_results[name] = result
                     response_parts.append(
                         types.Part(
                             function_response=types.FunctionResponse(
-                                name=fc.name,
+                                name=name,
                                 response=result if isinstance(result, dict) else {"result": result},
                             )
                         )
@@ -264,5 +278,7 @@ class StoreAgent:
         state.success = False
         return state
 
+
+_log_safe_config()
 
 agent = StoreAgent()
