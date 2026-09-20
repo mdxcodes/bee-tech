@@ -85,7 +85,7 @@ def find_product(product_name: str):
         if query == product["name"].lower():
             return deepcopy(product)
 
-        for alias in product["aliases"]:
+        for alias in product["aliases"]: 
             if query == alias.lower():
                 return deepcopy(product)
 
