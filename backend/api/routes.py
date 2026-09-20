@@ -15,7 +15,7 @@ class NormalizedRequest(BaseModel):
 class OrderResponse(BaseModel):
     success: bool | None = None
     message: str | None = None
-    order_id: str | None = None
+    order_id: str | int | None = None
     items: list[dict] | None = None
     total: float | None = None
     delivery_created: bool | None = None

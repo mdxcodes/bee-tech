@@ -19,8 +19,8 @@ def check_availability_tool(product_id: str, quantity: int) -> bool:
     return check_availability(product_id, quantity)
 
 
-def create_order_tool(customer_id: str | None, items: list[dict]) -> dict:
-    order = create_order(customer_id, items)
+def create_order_tool(customer_id: str | None, items: list[dict], delivery_address: str | None = None) -> dict:
+    order = create_order(customer_id, items, delivery_address=delivery_address)
     return order.model_dump()
 
 
