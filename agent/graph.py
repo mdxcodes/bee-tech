@@ -13,11 +13,6 @@ load_dotenv()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-if not GOOGLE_API_KEY:
-    raise RuntimeError("GOOGLE_API_KEY must be set in environment")
-
-_client = genai.Client(api_key=GOOGLE_API_KEY)
-
 SYSTEM_PROMPT = """You are an autonomous AI operator for a neighborhood Indian Kirana store.
 
 Your job is to understand customer requests and actually execute store operations using the available tools.
@@ -42,6 +37,13 @@ When the customer requests an order:
 If information is ambiguous, ask the customer instead of guessing.
 
 Never claim an action succeeded unless the corresponding tool returned success."""
+
+
+def _get_client() -> genai.Client:
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise RuntimeError("GOOGLE_API_KEY must be set in environment")
+    return genai.Client(api_key=api_key)
 
 
 def _build_tool_definitions() -> list[types.Tool]:
@@ -183,6 +185,7 @@ class StoreAgent:
         self.tools = TOOLS
 
     async def run(self, state: AgentState) -> AgentState:
+        client = _get_client()
         tools_def = _build_tool_definitions()
         config = types.GenerateContentConfig(
             tools=tools_def,
@@ -200,7 +203,7 @@ class StoreAgent:
         max_iterations = 10
 
         for _ in range(max_iterations):
-            response = _client.models.generate_content(
+            response = client.models.generate_content(
                 model=GEMINI_MODEL,
                 contents=contents,
                 config=config,
