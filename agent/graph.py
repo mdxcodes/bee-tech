@@ -209,7 +209,17 @@ class StoreAgent:
                 config=config,
             )
 
+            if not response.candidates:
+                state.error = "No response from model."
+                state.success = False
+                return state
+
             candidate = response.candidates[0]
+            if not candidate.content or not candidate.content.parts:
+                state.error = "Empty response from model."
+                state.success = False
+                return state
+
             parts = candidate.content.parts
 
             function_calls = [p for p in parts if p.function_call]

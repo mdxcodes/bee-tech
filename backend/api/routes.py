@@ -24,21 +24,24 @@ class OrderResponse(BaseModel):
 
 @router.post("/process", response_model=OrderResponse)
 async def process_request(request: NormalizedRequest):
-    state = AgentState(
-        raw_input=request.text,
-        channel=request.channel,
-    )
-    agent = StoreAgent()
-    result = await agent.run(state)
-    return OrderResponse(
-        success=result.success,
-        message=result.confirmation_message,
-        order_id=result.order_id,
-        items=result.items,
-        total=result.total,
-        delivery_created=result.delivery_created,
-        error=result.error,
-    )
+    try:
+        state = AgentState(
+            raw_input=request.text,
+            channel=request.channel,
+        )
+        agent = StoreAgent()
+        result = await agent.run(state)
+        return OrderResponse(
+            success=result.success,
+            message=result.confirmation_message,
+            order_id=result.order_id,
+            items=result.items,
+            total=result.total,
+            delivery_created=result.delivery_created,
+            error=result.error,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("/health")
